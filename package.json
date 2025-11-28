@@ -1,0 +1,26 @@
+{
+  "name": "aelishrollo-new-package-mafia-discord-posts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx src/get-recent-npm.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aelishRollo/New-Package-Mafia"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aelishRollo/New-Package-Mafia/issues"
+  },
+  "homepage": "https://github.com/aelishRollo/New-Package-Mafia#readme",
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
