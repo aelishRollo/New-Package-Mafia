@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "tsx src/get-recent-npm.ts",
+    "start": "touch .env && tsx --env-file .env src/index.ts",
     "check-types": "tsc --noEmit"
   },
   "repository": {
