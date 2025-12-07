@@ -15,15 +15,29 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
     return "No new packages found.";
   }
 
-  const header = "| Name | Description | Published | Versions |";
-  const separator = "|:-----|:------------|:----------|:---------|";
+  const hasJsLines = packages.some((pkg) => pkg.jsLines !== undefined);
+
+  const header = hasJsLines
+    ? "| Name | Description | Published | Versions | CLI | JS Lines |"
+    : "| Name | Description | Published | Versions | CLI |";
+
+  const separator = hasJsLines
+    ? "|:-----|:------------|:----------|:---------|:---:|:---------|"
+    : "|:-----|:------------|:----------|:---------|:---:|";
 
   const rows = packages.map((pkg) => {
     const name = `[${pkg.name}](${pkg.npmUrl})`;
     const desc = (pkg.description || "-").substring(0, 80);
     const published = pkg.publishedAt.toISOString().split("T")[0];
     const versions = pkg.numberOfVersions.toString();
-    return `| ${name} | ${desc} | ${published} | ${versions} |`;
+    const hasCli = pkg.hasBin ? "✓" : "";
+
+    if (hasJsLines) {
+      const jsLines = pkg.jsLines?.toLocaleString() || "0";
+      return `| ${name} | ${desc} | ${published} | ${versions} | ${hasCli} | ${jsLines} |`;
+    }
+
+    return `| ${name} | ${desc} | ${published} | ${versions} | ${hasCli} |`;
   });
 
   return [header, separator, ...rows].join("\n");
@@ -62,7 +76,19 @@ export async function postPackagesToMattermost(
   const date = new Date().toISOString().split("T")[0];
   const title = `## New NPM Packages (${date})`;
   const table = toMarkdownTable(packages);
-  const text = `${title}\n\n${table}`;
+
+  // Add AI summaries section if any packages have summaries
+  const packagesWithSummaries = packages.filter(pkg => pkg.aiSummary);
+  let summariesSection = "";
+
+  if (packagesWithSummaries.length > 0) {
+    summariesSection = "\n\n### AI Summaries\n\n";
+    summariesSection += packagesWithSummaries
+      .map(pkg => `**${pkg.name}**: ${pkg.aiSummary}`)
+      .join("\n");
+  }
+
+  const text = `${title}\n\n${table}${summariesSection}`;
 
   // Mattermost supports up to 16383 characters per post
   if (text.length <= 16000) {

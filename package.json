@@ -20,7 +20,12 @@
   "homepage": "https://github.com/aelishRollo/New-Package-Mafia#readme",
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/tar": "^6.1.13",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "tar": "^7.5.2"
   }
 }
