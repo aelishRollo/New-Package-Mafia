@@ -10,36 +10,13 @@
 
 import { matchesSearch, parseSearchTerms } from "./description-filter.js";
 import { countJsLinesInPackage } from "./js-lines-counter.js";
+import type { GetRecentPackagesOptions, PackageInfo } from "./package-types.js";
 
 const REGISTRY_CHANGES_URL = "https://replicate.npmjs.com/registry/_changes";
 const REGISTRY_DOC_URL_BASE = "https://registry.npmjs.org";
 const NPM_PACKAGE_URL_BASE = "https://www.npmjs.com/package";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-export interface PackageInfo {
-  name: string;
-  version: string;
-  description: string;
-  publishedAt: Date;
-  npmUrl: string;
-  numberOfVersions: number;
-  jsLines?: number;
-  hasBin?: boolean;
-  aiSummary?: string;
-}
-
-export interface GetRecentNpmOptions {
-  changesLimit?: number;
-  maxResults?: number;
-  daysBack?: number;
-  concurrency?: number;
-  searchTerms?: string;
-  partialMatch?: boolean;
-  minJsLines?: number;
-  maxPages?: number;
-  requireBin?: boolean;
-}
 
 interface ChangesResponse {
   results: Array<{ id: string }>;
@@ -109,7 +86,7 @@ async function getIfFirstVersionRecent(
   const versionNames = Object.keys(versionsObj);
   const numberOfVersions = versionNames.length;
 
-  if (numberOfVersions === 0) {
+  if (numberOfVersions <= 1) {
     return null;
   }
 
@@ -154,6 +131,7 @@ async function getIfFirstVersionRecent(
   const hasBin = !!(versionData?.bin && Object.keys(versionData.bin).length > 0);
 
   return {
+    ecosystem: "npm",
     name: pkgName,
     version: latestVersion,
     description,
@@ -169,7 +147,7 @@ async function getIfFirstVersionRecent(
  * Automatically pages through the changes feed until enough results are found.
  */
 export async function getRecentNpmPackages(
-  options: GetRecentNpmOptions = {}
+  options: GetRecentPackagesOptions = {}
 ): Promise<PackageInfo[]> {
   const {
     changesLimit = 200,

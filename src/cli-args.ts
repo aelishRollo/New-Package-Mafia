@@ -4,6 +4,7 @@
 
 export interface CliArgs {
   help?: boolean;
+  provider?: string;
   search?: string;
   range?: string;
   partialMatch?: boolean;
@@ -29,6 +30,11 @@ export function parseCliArgs(args: string[]): CliArgs {
       case "--search":
       case "-s":
         result.search = args[++i];
+        break;
+
+      case "--provider":
+      case "-p":
+        result.provider = args[++i];
         break;
 
       case "--range":
@@ -74,6 +80,8 @@ Usage:
 
 Options:
   --help, -h              Show this help message
+  --provider, -p <name>   Package registry provider (default: npm)
+                          Values: npm, rust, ruby, go, java
   --search, -s <terms>    Search for packages by name or description (AND logic)
                           Searches both package name and description fields
                           Example: --search "react typescript"
@@ -95,11 +103,14 @@ Examples:
   # Interactive mode (prompts for all options)
   pnpm start
 
-  # Search for React packages from last 2 weeks
-  pnpm start --search "react" --range 2w
+  # Search for React npm packages from last 2 weeks
+  pnpm start --provider npm --search "react" --range 2w
 
-  # Find TypeScript packages with at least 500 lines of JS
-  pnpm start --search "typescript" --min-js-lines 500
+  # Find new Rust crates
+  pnpm start --provider rust --range 7d
+
+  # Find TypeScript npm packages with at least 500 lines of JS
+  pnpm start --provider npm --search "typescript" --min-js-lines 500
 
   # Get packages from last month, max 50 results
   pnpm start --range 1m --max-results 50

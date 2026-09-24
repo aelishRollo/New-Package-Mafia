@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "touch .env && tsx --env-file .env src/index.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "check-types": "tsc --noEmit"
   },
   "repository": {

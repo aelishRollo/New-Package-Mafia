@@ -1,4 +1,4 @@
-import type { PackageInfo } from "./get-recent-npm.js";
+import type { PackageInfo } from "./package-types.js";
 
 interface MattermostPayload {
   text?: string;
@@ -18,14 +18,15 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
   const hasJsLines = packages.some((pkg) => pkg.jsLines !== undefined);
 
   const header = hasJsLines
-    ? "| Name | Description | Published | Versions | CLI | JS Lines |"
-    : "| Name | Description | Published | Versions | CLI |";
+    ? "| Ecosystem | Name | Description | Published | Versions | CLI | JS Lines |"
+    : "| Ecosystem | Name | Description | Published | Versions | CLI |";
 
   const separator = hasJsLines
-    ? "|:-----|:------------|:----------|:---------|:---:|:---------|"
-    : "|:-----|:------------|:----------|:---------|:---:|";
+    ? "|:----------|:-----|:------------|:----------|:---------|:---:|:---------|"
+    : "|:----------|:-----|:------------|:----------|:---------|:---:|";
 
   const rows = packages.map((pkg) => {
+    const ecosystem = pkg.ecosystem;
     const name = `[${pkg.name}](${pkg.npmUrl})`;
     const desc = (pkg.description || "-").substring(0, 80);
     const published = pkg.publishedAt.toISOString().split("T")[0];
@@ -34,10 +35,10 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
 
     if (hasJsLines) {
       const jsLines = pkg.jsLines?.toLocaleString() || "0";
-      return `| ${name} | ${desc} | ${published} | ${versions} | ${hasCli} | ${jsLines} |`;
+      return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${hasCli} | ${jsLines} |`;
     }
 
-    return `| ${name} | ${desc} | ${published} | ${versions} | ${hasCli} |`;
+    return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${hasCli} |`;
   });
 
   return [header, separator, ...rows].join("\n");
@@ -74,7 +75,7 @@ export async function postPackagesToMattermost(
   webhookUrl: string
 ): Promise<void> {
   const date = new Date().toISOString().split("T")[0];
-  const title = `## New NPM Packages (${date})`;
+  const title = `## New Packages (${date})`;
   const table = toMarkdownTable(packages);
 
   // Add AI summaries section if any packages have summaries
@@ -94,14 +95,14 @@ export async function postPackagesToMattermost(
   if (text.length <= 16000) {
     await postToMattermost(webhookUrl, {
       text,
-      username: "NPM Package Tracker",
+      username: "Package Tracker",
     });
     console.log("Successfully posted to Mattermost.");
   } else {
     // Split into multiple posts if needed
     await postToMattermost(webhookUrl, {
       text: title,
-      username: "NPM Package Tracker",
+      username: "Package Tracker",
     });
 
     const lines = table.split("\n");
@@ -113,7 +114,7 @@ export async function postPackagesToMattermost(
       if ((chunk + line + "\n").length > 15000) {
         await postToMattermost(webhookUrl, {
           text: chunk,
-          username: "NPM Package Tracker",
+          username: "Package Tracker",
         });
         chunk = header + line + "\n";
       } else {
@@ -124,7 +125,7 @@ export async function postPackagesToMattermost(
     if (chunk.length > header.length) {
       await postToMattermost(webhookUrl, {
         text: chunk,
-        username: "NPM Package Tracker",
+        username: "Package Tracker",
       });
     }
 

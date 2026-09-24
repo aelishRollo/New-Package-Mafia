@@ -1,8 +1,9 @@
 import * as clack from "@clack/prompts";
-import { getRecentNpmPackages, type PackageInfo } from "./get-recent-npm.js";
+import { getRecentPackages, type PackageInfo, type PackageProvider } from "./get-recent-packages.js";
 import { postPackagesToMattermost } from "./mattermost-post.js";
 import { parseCliArgs, printHelp } from "./cli-args.js";
 import { parseDateRange, formatDaysAsRange } from "./date-parser.js";
+import { isPackageProvider, PACKAGE_PROVIDERS } from "./package-types.js";
 import { writeFile, readFile, access, mkdir } from "fs/promises";
 import { exec, spawn } from "child_process";
 import { promisify } from "util";
@@ -23,6 +24,7 @@ async function parseCsvFile(filePath: string): Promise<PackageInfo[]> {
   for (let i = 1; i < lines.length; i++) {
     const values = parseCsvLine(lines[i]);
 
+    const ecosystemIdx = headers.indexOf("Ecosystem");
     const nameIdx = headers.indexOf("Name");
     const versionIdx = headers.indexOf("Version");
     const descIdx = headers.indexOf("Description");
@@ -37,6 +39,7 @@ async function parseCsvFile(filePath: string): Promise<PackageInfo[]> {
     }
 
     packages.push({
+      ecosystem: ecosystemIdx === -1 ? "npm" : (values[ecosystemIdx] as PackageInfo["ecosystem"]) || "npm",
       name: values[nameIdx] || "",
       version: values[versionIdx] || "",
       description: values[descIdx] || "",
@@ -93,9 +96,10 @@ async function generateAiSummaries(packages: PackageInfo[]): Promise<void> {
   console.log("\nAI Summaries:\n");
 
   for (const pkg of packages) {
-    const prompt = `Research this npm package and any technologies it integrates with. Then summarize in 10 words max. Sacrifice grammar for extreme brevity. Focus on what it does and what it integrates with, not quality.
+    const prompt = `Research this software package and any technologies it integrates with. Then summarize in 10 words max. Sacrifice grammar for extreme brevity. Focus on what it does and what it integrates with, not quality.
 
 Package: ${pkg.name}
+Ecosystem: ${pkg.ecosystem}
 Description: ${pkg.description}
 URL: ${pkg.npmUrl}
 
@@ -157,7 +161,7 @@ async function main() {
 
   const webhookUrl = process.env.MATTERMOST_WEBHOOK_URL;
 
-  clack.intro("NPM Package Search");
+  clack.intro("Package Registry Search");
 
   if (!webhookUrl) {
     clack.log.warn("MATTERMOST_WEBHOOK_URL not set - results will not be posted to Mattermost");
@@ -271,6 +275,7 @@ async function main() {
   }
 
   let searchTerms = args.search;
+  let provider: PackageProvider = "npm";
   let dateRange = args.range;
   let partialMatch = args.partialMatch ?? true;
   let minJsLines = args.minJsLines;
@@ -279,7 +284,30 @@ async function main() {
   let maxPages = args.maxPages ?? 1000;
   let requireBin = args.requireBin ?? false;
 
+  if (args.provider !== undefined) {
+    if (!isPackageProvider(args.provider)) {
+      clack.log.error(`Unsupported provider: ${args.provider}. Use one of: ${PACKAGE_PROVIDERS.join(", ")}`);
+      process.exit(1);
+    }
+    provider = args.provider;
+  }
+
   // Interactive prompts for missing values
+  if (args.provider === undefined) {
+    const providerInput = await clack.select({
+      message: "Package registry provider",
+      options: PACKAGE_PROVIDERS.map((value) => ({ value, label: value })),
+      initialValue: "npm",
+    });
+
+    if (clack.isCancel(providerInput)) {
+      clack.cancel("Operation cancelled.");
+      process.exit(0);
+    }
+
+    provider = providerInput as PackageProvider;
+  }
+
   if (searchTerms === undefined) {
     const searchInput = await clack.text({
       message: "Search for packages by name or description (leave empty to skip)",
@@ -374,10 +402,21 @@ async function main() {
   const daysBack = parsedRange.days;
 
   const spinner = clack.spinner();
-  spinner.start("Fetching recent npm packages...");
+  if (provider !== "npm" && minJsLines !== undefined) {
+    clack.log.warn("--min-js-lines is npm-only and will be ignored for this provider");
+    minJsLines = undefined;
+  }
+
+  if (provider !== "npm" && requireBin) {
+    clack.log.warn("--require-bin is npm-only and will be ignored for this provider");
+    requireBin = false;
+  }
+
+  spinner.start(`Fetching recent ${provider} packages...`);
 
   try {
-    const packages = await getRecentNpmPackages({
+    const packages = await getRecentPackages({
+      provider,
       changesLimit,
       maxResults,
       daysBack,
@@ -470,15 +509,16 @@ async function main() {
   }
 }
 
-function generateCsv(packages: { name: string; version: string; description: string; publishedAt: Date; npmUrl: string; numberOfVersions: number; jsLines?: number; hasBin?: boolean }[]): string {
+function generateCsv(packages: PackageInfo[]): string {
   const hasJsLines = packages.some(pkg => pkg.jsLines !== undefined);
 
   const headers = hasJsLines
-    ? ["Name", "Version", "Description", "Published", "Versions", "Has CLI", "JS Lines", "URL"]
-    : ["Name", "Version", "Description", "Published", "Versions", "Has CLI", "URL"];
+    ? ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Has CLI", "JS Lines", "URL"]
+    : ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Has CLI", "URL"];
 
   const rows = packages.map((pkg) => {
     const row = [
+      escapeCsv(pkg.ecosystem),
       escapeCsv(pkg.name),
       escapeCsv(pkg.version),
       escapeCsv(pkg.description),
