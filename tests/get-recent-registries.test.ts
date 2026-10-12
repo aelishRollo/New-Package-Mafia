@@ -106,3 +106,34 @@ test("rust provider applies shared search filters", async () => {
     globalThis.fetch = oldFetch;
   }
 });
+
+test("rust provider clamps crates.io page size", async () => {
+  const oldFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(input.toString());
+
+    assert.equal(url.hostname, "crates.io");
+    assert.equal(url.searchParams.get("per_page"), "100");
+
+    return response({
+      crates: [
+        crate("new-good", "2026-10-11T00:00:00Z", 2),
+      ],
+    });
+  }) as typeof fetch;
+
+  try {
+    const packages = await getRecentRustPackages({
+      changesLimit: 10_000,
+      maxPages: 1,
+      maxResults: 10,
+      daysBack: 7,
+      now: Date.parse("2026-10-12T00:00:00Z"),
+    });
+
+    assert.deepEqual(packages.map((pkg) => pkg.name), ["new-good"]);
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});

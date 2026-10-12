@@ -9,6 +9,7 @@ import {
 } from "./provider-utils.js";
 
 const CRATES_URL = "https://crates.io/api/v1/crates";
+const CRATES_MAX_PER_PAGE = 100;
 const CRATES_PAGE_DELAY_MS = 1_000;
 const RUBYGEMS_LATEST_URL = "https://rubygems.org/api/v1/activity/latest.json";
 const RUBYGEMS_UPDATED_URL = "https://rubygems.org/api/v1/activity/just_updated.json";
@@ -78,6 +79,7 @@ export async function getRecentRustPackages(
     maxPages = 10,
   } = options;
   const now = options.now ?? Date.now();
+  const perPage = Math.min(Math.max(1, changesLimit), CRATES_MAX_PER_PAGE);
   const results: PackageInfo[] = [];
 
   console.log(`Searching crates.io for new crates from the last ${daysBack} day(s)...`);
@@ -85,7 +87,7 @@ export async function getRecentRustPackages(
   for (let page = 1; page <= maxPages && results.length < maxResults; page++) {
     const url = new URL(CRATES_URL);
     url.searchParams.set("page", String(page));
-    url.searchParams.set("per_page", String(changesLimit));
+    url.searchParams.set("per_page", String(perPage));
     url.searchParams.set("sort", "new");
 
     const res = await registryFetch(url);
@@ -121,7 +123,7 @@ export async function getRecentRustPackages(
       }
     }
 
-    if (crates.length < changesLimit || results.length >= maxResults) break;
+    if (crates.length < perPage || results.length >= maxResults) break;
     if (page < maxPages) {
       // ken: one-request-per-second crates.io paging; revisit only if API policy changes or scans move off the public API.
       await sleep(CRATES_PAGE_DELAY_MS);
