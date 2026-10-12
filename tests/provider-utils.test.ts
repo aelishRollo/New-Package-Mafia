@@ -23,6 +23,17 @@ test("parseCliArgs reads provider flag", () => {
   assert.equal(parseCliArgs(["-p", "java"]).provider, "java");
 });
 
+test("parseCliArgs reads report control flags", () => {
+  const args = parseCliArgs([
+    "--csv",
+    "out/packages.csv",
+    "--ai-summaries",
+  ]);
+
+  assert.equal(args.csvFile, "out/packages.csv");
+  assert.equal(args.aiSummaries, true);
+});
+
 test("isWithinDays rejects old and future dates", () => {
   const now = Date.parse("2026-09-24T00:00:00Z");
   assert.equal(isWithinDays(new Date("2026-09-20T00:00:00Z"), 7, now), true);
@@ -45,4 +56,3 @@ test("passesCommonFilters honors requireBin", () => {
   assert.equal(passesCommonFilters(pkg({ hasBin: false }), { requireBin: true }), false);
   assert.equal(passesCommonFilters(pkg({ hasBin: true }), { requireBin: true }), true);
 });
-

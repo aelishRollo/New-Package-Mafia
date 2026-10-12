@@ -13,6 +13,8 @@ export interface CliArgs {
   changesLimit?: number;
   maxPages?: number;
   requireBin?: boolean;
+  csvFile?: string;
+  aiSummaries?: boolean;
 }
 
 export function parseCliArgs(args: string[]): CliArgs {
@@ -65,6 +67,14 @@ export function parseCliArgs(args: string[]): CliArgs {
       case "--require-bin":
         result.requireBin = true;
         break;
+
+      case "--csv":
+        result.csvFile = args[++i];
+        break;
+
+      case "--ai-summaries":
+        result.aiSummaries = true;
+        break;
     }
   }
 
@@ -98,6 +108,8 @@ Options:
                           The tool will automatically page through the changes feed
                           until it finds enough matching packages or hits this limit
   --require-bin           Only show packages with CLI bin entries (executables)
+  --csv <path>            Process an existing CSV instead of searching for new packages
+  --ai-summaries          Prompt to generate AI summaries (default: off)
 
 Examples:
   # Interactive mode (prompts for all options)
@@ -114,6 +126,9 @@ Examples:
 
   # Get packages from last month, max 50 results
   pnpm start --range 1m --max-results 50
+
+  # Process an existing CSV
+  pnpm start --csv out/npm-packages-1234567890.csv
 
 Environment:
   MATTERMOST_WEBHOOK_URL  Optional: Webhook URL for posting results to Mattermost

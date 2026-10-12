@@ -152,7 +152,9 @@ Response format: Just the summary, nothing else.`;
 }
 
 async function main() {
-  const args = parseCliArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const args = parseCliArgs(rawArgs);
+  const promptForMissing = rawArgs.length === 0;
 
   if (args.help) {
     printHelp();
@@ -169,19 +171,7 @@ async function main() {
     clack.log.info("Results will be posted to Mattermost");
   }
 
-  // First question: ask if they want to process an existing CSV
-  const csvFileInput = await clack.text({
-    message: "Process existing CSV file? (leave empty to search for new packages)",
-    placeholder: "e.g., out/npm-packages-1234567890.csv",
-    defaultValue: "",
-  });
-
-  if (clack.isCancel(csvFileInput)) {
-    clack.cancel("Operation cancelled.");
-    process.exit(0);
-  }
-
-  const csvFilePath = (csvFileInput as string).trim();
+  const csvFilePath = args.csvFile?.trim() ?? "";
 
   // If CSV file provided, load it and skip to summary selection
   if (csvFilePath) {
@@ -197,23 +187,8 @@ async function main() {
       const packages = await parseCsvFile(csvFilePath);
       clack.log.success(`Loaded ${packages.length} package(s) from CSV!`);
 
-      // Check if Claude Code is available before asking
-      const claudeAvailable = await checkClaudeCodeAvailable();
-
-      // Ask if user wants AI summaries
-      const wantsSummaries = await clack.confirm({
-        message: claudeAvailable
-          ? "Generate AI summaries for selected packages?"
-          : "Generate AI summaries for selected packages? (Note: Claude Code CLI not detected)",
-        initialValue: false,
-      });
-
-      if (clack.isCancel(wantsSummaries)) {
-        clack.cancel("Operation cancelled.");
-        process.exit(0);
-      }
-
-      if (wantsSummaries) {
+      if (args.aiSummaries) {
+        const claudeAvailable = await checkClaudeCodeAvailable();
         if (!claudeAvailable) {
           clack.log.error("Claude Code CLI not found. Please install it or ensure it's in your PATH.");
           clack.log.info("Install from: https://github.com/anthropics/claude-code");
@@ -293,7 +268,7 @@ async function main() {
   }
 
   // Interactive prompts for missing values
-  if (args.provider === undefined) {
+  if (promptForMissing && args.provider === undefined) {
     const providerInput = await clack.select({
       message: "Package registry provider",
       options: PACKAGE_PROVIDERS.map((value) => ({ value, label: value })),
@@ -308,7 +283,7 @@ async function main() {
     provider = providerInput as PackageProvider;
   }
 
-  if (searchTerms === undefined) {
+  if (promptForMissing && searchTerms === undefined) {
     const searchInput = await clack.text({
       message: "Search for packages by name or description (leave empty to skip)",
       placeholder: "e.g., react typescript",
@@ -323,7 +298,7 @@ async function main() {
     searchTerms = searchInput as string;
   }
 
-  if (dateRange === undefined) {
+  if (promptForMissing && dateRange === undefined) {
     const rangeInput = await clack.text({
       message: "Date range for packages",
       placeholder: "e.g., 7d, 2w, 1m, 2y",
@@ -346,7 +321,7 @@ async function main() {
     dateRange = (rangeInput as string).trim() || "7d";
   }
 
-  if (searchTerms && searchTerms.trim().length > 0 && args.partialMatch === undefined) {
+  if (promptForMissing && searchTerms && searchTerms.trim().length > 0 && args.partialMatch === undefined) {
     const partialMatchInput = await clack.confirm({
       message: "Enable partial word matching? (e.g., 'react' matches 'reactivity')",
       initialValue: true,
@@ -360,7 +335,7 @@ async function main() {
     partialMatch = partialMatchInput as boolean;
   }
 
-  if (minJsLines === undefined) {
+  if (promptForMissing && minJsLines === undefined) {
     const jsLinesInput = await clack.text({
       message: "Minimum JavaScript lines (leave empty to skip this filter)",
       placeholder: "e.g., 100, 500, 1000",
@@ -383,7 +358,7 @@ async function main() {
     minJsLines = jsLinesStr && jsLinesStr.trim() ? parseInt(jsLinesStr, 10) : undefined;
   }
 
-  if (args.requireBin === undefined) {
+  if (promptForMissing && args.requireBin === undefined) {
     const binInput = await clack.confirm({
       message: "Only show packages with CLI binaries?",
       initialValue: false,
@@ -398,7 +373,7 @@ async function main() {
   }
 
   // Parse date range
-  const parsedRange = parseDateRange(dateRange);
+  const parsedRange = parseDateRange(dateRange ?? "7d");
   const daysBack = parsedRange.days;
 
   const spinner = clack.spinner();
@@ -437,23 +412,8 @@ async function main() {
 
     clack.log.success(`Found ${packages.length} package(s)!`);
 
-    // Check if Claude Code is available before asking
-    const claudeAvailable = await checkClaudeCodeAvailable();
-
-    // Ask if user wants AI summaries
-    const wantsSummaries = await clack.confirm({
-      message: claudeAvailable
-        ? "Generate AI summaries for selected packages?"
-        : "Generate AI summaries for selected packages? (Note: Claude Code CLI not detected)",
-      initialValue: false,
-    });
-
-    if (clack.isCancel(wantsSummaries)) {
-      clack.cancel("Operation cancelled.");
-      process.exit(0);
-    }
-
-    if (wantsSummaries) {
+    if (args.aiSummaries) {
+      const claudeAvailable = await checkClaudeCodeAvailable();
       if (!claudeAvailable) {
         clack.log.error("Claude Code CLI not found. Please install it or ensure it's in your PATH.");
         clack.log.info("Install from: https://github.com/anthropics/claude-code");

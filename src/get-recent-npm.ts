@@ -437,7 +437,7 @@ export async function getRecentNpmPackages(
     maxPages
   );
 
-  const results = await processPackageNames(names, {
+  const results = await processPackageNames([...names].reverse(), {
     daysBack,
     now,
     maxResults,
