@@ -91,7 +91,8 @@ Usage:
 Options:
   --help, -h              Show this help message
   --provider, -p <name>   Package registry provider (default: npm)
-                          Values: npm, rust, ruby, go, java
+                          Values: all, npm, rust, ruby, go, java
+                          all currently runs report-ready providers: npm, rust
   --search, -s <terms>    Search for packages by name or description (AND logic)
                           Searches both package name and description fields
                           Example: --search "react typescript"
@@ -120,6 +121,9 @@ Examples:
 
   # Find new Rust crates
   pnpm start --provider rust --range 7d
+
+  # Combined weekly report for hardened providers
+  pnpm start --provider all --range 7d
 
   # Find TypeScript npm packages with at least 500 lines of JS
   pnpm start --provider npm --search "typescript" --min-js-lines 500

@@ -21,6 +21,7 @@ function pkg(overrides: Partial<PackageInfo> = {}): PackageInfo {
 test("parseCliArgs reads provider flag", () => {
   assert.equal(parseCliArgs(["--provider", "rust"]).provider, "rust");
   assert.equal(parseCliArgs(["-p", "java"]).provider, "java");
+  assert.equal(parseCliArgs(["--provider", "all"]).provider, "all");
 });
 
 test("parseCliArgs reads report control flags", () => {

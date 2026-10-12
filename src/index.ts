@@ -229,7 +229,7 @@ async function main() {
 
       // Generate new CSV with updated data
       await mkdir("out", { recursive: true });
-      const newCsvPath = `out/npm-packages-${Date.now()}.csv`;
+      const newCsvPath = `out/package-report-${Date.now()}.csv`;
       const csvContent = generateCsv(packages);
       await writeFile(newCsvPath, csvContent, "utf-8");
       clack.log.info(`New CSV file saved: ${newCsvPath}`);
@@ -377,12 +377,16 @@ async function main() {
   const daysBack = parsedRange.days;
 
   const spinner = clack.spinner();
-  if (provider !== "npm" && minJsLines !== undefined) {
+  if (provider === "all" && minJsLines !== undefined) {
+    clack.log.warn("--min-js-lines applies only to npm packages in all-provider mode");
+  } else if (provider !== "npm" && minJsLines !== undefined) {
     clack.log.warn("--min-js-lines is npm-only and will be ignored for this provider");
     minJsLines = undefined;
   }
 
-  if (provider !== "npm" && requireBin) {
+  if (provider === "all" && requireBin) {
+    clack.log.warn("--require-bin applies only to npm packages in all-provider mode");
+  } else if (provider !== "npm" && requireBin) {
     clack.log.warn("--require-bin is npm-only and will be ignored for this provider");
     requireBin = false;
   }
@@ -451,7 +455,7 @@ async function main() {
 
     // Generate CSV
     await mkdir("out", { recursive: true });
-    const csvPath = `out/npm-packages-${Date.now()}.csv`;
+    const csvPath = `out/package-report-${Date.now()}.csv`;
     const csvContent = generateCsv(packages);
     await writeFile(csvPath, csvContent, "utf-8");
     clack.log.info(`CSV file saved: ${csvPath}`);

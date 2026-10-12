@@ -1,7 +1,8 @@
-export type PackageProvider = "npm" | "rust" | "ruby" | "go" | "java";
+export type PackageEcosystem = "npm" | "rust" | "ruby" | "go" | "java";
+export type PackageProvider = PackageEcosystem | "all";
 
 export interface PackageInfo {
-  ecosystem: PackageProvider;
+  ecosystem: PackageEcosystem;
   name: string;
   version: string;
   description: string;
@@ -33,6 +34,7 @@ export interface GetRecentPackagesOptions {
 }
 
 export const PACKAGE_PROVIDERS: PackageProvider[] = [
+  "all",
   "npm",
   "rust",
   "ruby",
