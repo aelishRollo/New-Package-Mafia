@@ -3,9 +3,9 @@ import test from "node:test";
 import { toMarkdownTable } from "../src/mattermost-post.js";
 import type { PackageInfo } from "../src/package-types.js";
 
-function pkg(name: string): PackageInfo {
+function pkg(name: string, ecosystem: PackageInfo["ecosystem"] = "npm"): PackageInfo {
   return {
-    ecosystem: "npm",
+    ecosystem,
     name,
     version: "1.0.1",
     description: `${name} package`,
@@ -28,4 +28,20 @@ test("toMarkdownTable orders packages by name ascending", () => {
   assert.match(rows[0], /\[@scope\/bravo\]/);
   assert.match(rows[1], /\[Alpha\]/);
   assert.match(rows[2], /\[zeta\]/);
+});
+
+test("toMarkdownTable lists npm packages before rust packages", () => {
+  const table = toMarkdownTable([
+    pkg("aaa-rust", "rust"),
+    pkg("zzz-npm", "npm"),
+    pkg("bbb-rust", "rust"),
+    pkg("aaa-npm", "npm"),
+  ]);
+
+  const rows = table.split("\n").slice(2);
+
+  assert.match(rows[0], /\| npm \| \[aaa-npm\]/);
+  assert.match(rows[1], /\| npm \| \[zzz-npm\]/);
+  assert.match(rows[2], /\| rust \| \[aaa-rust\]/);
+  assert.match(rows[3], /\| rust \| \[bbb-rust\]/);
 });

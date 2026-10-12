@@ -7,8 +7,17 @@ interface MattermostPayload {
   channel?: string;
 }
 
-function sortPackagesByName(packages: PackageInfo[]): PackageInfo[] {
+const ECOSYSTEM_ORDER: Record<PackageInfo["ecosystem"], number> = {
+  npm: 0,
+  rust: 1,
+  ruby: 2,
+  go: 3,
+  java: 4,
+};
+
+function sortPackagesForReport(packages: PackageInfo[]): PackageInfo[] {
   return [...packages].sort((a, b) =>
+    ECOSYSTEM_ORDER[a.ecosystem] - ECOSYSTEM_ORDER[b.ecosystem] ||
     a.name.localeCompare(b.name, "en", { sensitivity: "base" })
   );
 }
@@ -31,7 +40,7 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
     ? "|:----------|:-----|:------------|:----------|:---------|:---:|:---------|"
     : "|:----------|:-----|:------------|:----------|:---------|:---:|";
 
-  const rows = sortPackagesByName(packages).map((pkg) => {
+  const rows = sortPackagesForReport(packages).map((pkg) => {
     const ecosystem = pkg.ecosystem;
     const name = `[${pkg.name}](${pkg.npmUrl})`;
     const desc = (pkg.description || "-").substring(0, 80);
@@ -80,7 +89,7 @@ export async function postPackagesToMattermost(
   packages: PackageInfo[],
   webhookUrl: string
 ): Promise<void> {
-  const sortedPackages = sortPackagesByName(packages);
+  const sortedPackages = sortPackagesForReport(packages);
   const date = new Date().toISOString().split("T")[0];
   const title = `## New Packages (${date})`;
   const table = toMarkdownTable(sortedPackages);
