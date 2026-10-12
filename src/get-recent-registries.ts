@@ -9,6 +9,7 @@ import {
 } from "./provider-utils.js";
 
 const CRATES_URL = "https://crates.io/api/v1/crates";
+const CRATES_PAGE_DELAY_MS = 1_000;
 const RUBYGEMS_LATEST_URL = "https://rubygems.org/api/v1/activity/latest.json";
 const RUBYGEMS_UPDATED_URL = "https://rubygems.org/api/v1/activity/just_updated.json";
 const RUBYGEMS_VERSIONS_BASE = "https://rubygems.org/api/v1/versions";
@@ -76,7 +77,7 @@ export async function getRecentRustPackages(
     daysBack = 7,
     maxPages = 10,
   } = options;
-  const now = Date.now();
+  const now = options.now ?? Date.now();
   const results: PackageInfo[] = [];
 
   console.log(`Searching crates.io for new crates from the last ${daysBack} day(s)...`);
@@ -119,9 +120,19 @@ export async function getRecentRustPackages(
         console.log(`Found rust: ${pkg.name}@${pkg.version} [${results.length}/${maxResults}]`);
       }
     }
+
+    if (crates.length < changesLimit || results.length >= maxResults) break;
+    if (page < maxPages) {
+      // ken: one-request-per-second crates.io paging; revisit only if API policy changes or scans move off the public API.
+      await sleep(CRATES_PAGE_DELAY_MS);
+    }
   }
 
   return results;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function getRecentRubyPackages(
