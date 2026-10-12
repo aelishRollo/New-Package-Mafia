@@ -24,6 +24,12 @@ export interface GetRecentPackagesOptions {
   minJsLines?: number;
   maxPages?: number;
   requireBin?: boolean;
+  /** Test/debug hook: use this sequence as the npm forward scan start. */
+  npmStartSeq?: number;
+  /** Test/debug hook: freeze the npm scan end sequence without fetching head. */
+  npmHeadSeq?: number;
+  /** Test/debug hook: freeze "now" for date-window checks. */
+  now?: number;
 }
 
 export const PACKAGE_PROVIDERS: PackageProvider[] = [
@@ -37,4 +43,3 @@ export const PACKAGE_PROVIDERS: PackageProvider[] = [
 export function isPackageProvider(value: string): value is PackageProvider {
   return (PACKAGE_PROVIDERS as string[]).includes(value);
 }
-
