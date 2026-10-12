@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { toMarkdownTable } from "../src/mattermost-post.js";
+import type { PackageInfo } from "../src/package-types.js";
+
+function pkg(name: string): PackageInfo {
+  return {
+    ecosystem: "npm",
+    name,
+    version: "1.0.1",
+    description: `${name} package`,
+    publishedAt: new Date("2026-10-12T00:00:00Z"),
+    npmUrl: `https://www.npmjs.com/package/${encodeURIComponent(name)}`,
+    numberOfVersions: 2,
+    hasBin: false,
+  };
+}
+
+test("toMarkdownTable orders packages by name ascending", () => {
+  const table = toMarkdownTable([
+    pkg("zeta"),
+    pkg("@scope/bravo"),
+    pkg("Alpha"),
+  ]);
+
+  const rows = table.split("\n").slice(2);
+
+  assert.match(rows[0], /\[@scope\/bravo\]/);
+  assert.match(rows[1], /\[Alpha\]/);
+  assert.match(rows[2], /\[zeta\]/);
+});

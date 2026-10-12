@@ -7,6 +7,12 @@ interface MattermostPayload {
   channel?: string;
 }
 
+function sortPackagesByName(packages: PackageInfo[]): PackageInfo[] {
+  return [...packages].sort((a, b) =>
+    a.name.localeCompare(b.name, "en", { sensitivity: "base" })
+  );
+}
+
 /**
  * Convert package info to a markdown table
  */
@@ -25,7 +31,7 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
     ? "|:----------|:-----|:------------|:----------|:---------|:---:|:---------|"
     : "|:----------|:-----|:------------|:----------|:---------|:---:|";
 
-  const rows = packages.map((pkg) => {
+  const rows = sortPackagesByName(packages).map((pkg) => {
     const ecosystem = pkg.ecosystem;
     const name = `[${pkg.name}](${pkg.npmUrl})`;
     const desc = (pkg.description || "-").substring(0, 80);
@@ -74,12 +80,13 @@ export async function postPackagesToMattermost(
   packages: PackageInfo[],
   webhookUrl: string
 ): Promise<void> {
+  const sortedPackages = sortPackagesByName(packages);
   const date = new Date().toISOString().split("T")[0];
   const title = `## New Packages (${date})`;
-  const table = toMarkdownTable(packages);
+  const table = toMarkdownTable(sortedPackages);
 
   // Add AI summaries section if any packages have summaries
-  const packagesWithSummaries = packages.filter(pkg => pkg.aiSummary);
+  const packagesWithSummaries = sortedPackages.filter(pkg => pkg.aiSummary);
   let summariesSection = "";
 
   if (packagesWithSummaries.length > 0) {
