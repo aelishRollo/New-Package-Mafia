@@ -1,4 +1,5 @@
 import type { GetRecentPackagesOptions, PackageInfo } from "./package-types.js";
+import { gunzipSync } from "zlib";
 import {
   isWithinDays,
   errorMessage,
@@ -11,6 +12,8 @@ import {
 const CRATES_URL = "https://crates.io/api/v1/crates";
 const CRATES_MAX_PER_PAGE = 100;
 const CRATES_PAGE_DELAY_MS = 1_000;
+const CRATES_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024;
+const CRATES_CARGO_TOML_MAX_BYTES = 512 * 1024;
 const RUBYGEMS_LATEST_URL = "https://rubygems.org/api/v1/activity/latest.json";
 const RUBYGEMS_UPDATED_URL = "https://rubygems.org/api/v1/activity/just_updated.json";
 const RUBYGEMS_VERSIONS_BASE = "https://rubygems.org/api/v1/versions";
@@ -26,6 +29,11 @@ interface CrateSummary {
   num_versions: number;
   created_at: string;
   description?: string;
+}
+
+interface RustCrateInspection {
+  binSignals: string[];
+  hasBin: boolean;
 }
 
 interface RubyGemActivity {
@@ -106,18 +114,23 @@ export async function getRecentRustPackages(
       if (!isWithinDays(created, daysBack, now)) return results;
       if (crate.num_versions <= 1) continue;
 
+      const version = crate.newest_version || crate.max_version || crate.default_version || "";
       const pkg: PackageInfo = {
         ecosystem: "rust",
         name: crate.name,
-        version: crate.newest_version || crate.max_version || crate.default_version || "",
+        version,
         description: normalizeDescription(crate.description),
         publishedAt: created,
         npmUrl: `https://crates.io/crates/${encodeURIComponent(crate.name)}`,
         numberOfVersions: crate.num_versions,
         hasBin: false,
+        binSignals: [],
       };
 
       if (passesCommonFilters(pkg, options)) {
+        const inspection = await inspectRustCrate(crate.name, version);
+        pkg.hasBin = inspection.hasBin;
+        pkg.binSignals = inspection.binSignals;
         results.push(pkg);
         console.log(`Found rust: ${pkg.name}@${pkg.version} [${results.length}/${maxResults}]`);
       }
@@ -135,6 +148,152 @@ export async function getRecentRustPackages(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function inspectRustCrate(name: string, version: string): Promise<RustCrateInspection> {
+  if (!version) {
+    return { binSignals: [], hasBin: false };
+  }
+
+  try {
+    const url = `https://crates.io/api/v1/crates/${encodeURIComponent(name)}/${encodeURIComponent(version)}/download`;
+    const res = await registryFetch(url);
+    if (!res.ok) {
+      return { binSignals: [], hasBin: false };
+    }
+
+    const length = Number(res.headers.get("content-length") ?? "0");
+    if (length > CRATES_DOWNLOAD_MAX_BYTES) {
+      return { binSignals: [], hasBin: false };
+    }
+
+    const bytes = await readResponseBodyWithLimit(res, CRATES_DOWNLOAD_MAX_BYTES);
+    if (!bytes) {
+      return { binSignals: [], hasBin: false };
+    }
+
+    const cargoToml = readCargoTomlFromCrate(bytes);
+    if (!cargoToml) {
+      return { binSignals: [], hasBin: false };
+    }
+
+    return inspectCargoToml(cargoToml);
+  } catch {
+    return { binSignals: [], hasBin: false };
+  }
+}
+
+async function readResponseBodyWithLimit(res: Response, maxBytes: number): Promise<Buffer | null> {
+  if (!res.body) {
+    return null;
+  }
+
+  const chunks: Buffer[] = [];
+  let total = 0;
+  const reader = res.body.getReader();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+
+    chunks.push(Buffer.from(value));
+  }
+
+  return Buffer.concat(chunks, total);
+}
+
+function readCargoTomlFromCrate(crateBytes: Buffer): string | null {
+  const tarBytes = gunzipSync(crateBytes);
+  let offset = 0;
+
+  while (offset + 512 <= tarBytes.length) {
+    const header = tarBytes.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+
+    const path = readTarString(header, 0, 100);
+    const prefix = readTarString(header, 345, 155);
+    const fullPath = prefix ? `${prefix}/${path}` : path;
+    const size = parseInt(readTarString(header, 124, 12).trim() || "0", 8);
+    const dataStart = offset + 512;
+    const dataEnd = dataStart + size;
+
+    if (fullPath.endsWith("/Cargo.toml") && !fullPath.endsWith("/Cargo.toml.orig")) {
+      if (size > CRATES_CARGO_TOML_MAX_BYTES) return null;
+      return tarBytes.subarray(dataStart, dataEnd).toString("utf8");
+    }
+
+    offset = dataStart + Math.ceil(size / 512) * 512;
+  }
+
+  return null;
+}
+
+function readTarString(buffer: Buffer, offset: number, length: number): string {
+  const slice = buffer.subarray(offset, offset + length);
+  const zero = slice.indexOf(0);
+  return slice.subarray(0, zero === -1 ? slice.length : zero).toString("utf8");
+}
+
+function inspectCargoToml(cargoToml: string): RustCrateInspection {
+  const binSignals: string[] = [];
+  if (/^\s*\[\[bin\]\]/m.test(cargoToml)) {
+    binSignals.push("cli");
+  }
+  if (hasCargoDependency(cargoToml, "gpui")) {
+    binSignals.push("gpui");
+  }
+  if (
+    hasCargoDependency(cargoToml, "tauri") ||
+    hasCargoDependency(cargoToml, "tauri-build") ||
+    hasCargoDependencyPrefix(cargoToml, "tauri-plugin-")
+  ) {
+    binSignals.push("tauri");
+  }
+
+  return { binSignals, hasBin: binSignals.includes("cli") };
+}
+
+function hasCargoDependency(cargoToml: string, name: string): boolean {
+  return hasCargoDependencyMatching(cargoToml, (dependency) => dependency === name);
+}
+
+function hasCargoDependencyPrefix(cargoToml: string, prefix: string): boolean {
+  return hasCargoDependencyMatching(cargoToml, (dependency) => dependency.startsWith(prefix));
+}
+
+function hasCargoDependencyMatching(
+  cargoToml: string,
+  matches: (dependency: string) => boolean
+): boolean {
+  let section = "";
+
+  for (const rawLine of cargoToml.split("\n")) {
+    const line = rawLine.split("#")[0].trim();
+    if (!line) continue;
+
+    const sectionMatch = line.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      section = sectionMatch[1];
+      const tableMatch = section.match(/^(?:dependencies|build-dependencies)\.([\w-]+)$/);
+      if (tableMatch && matches(tableMatch[1])) return true;
+      continue;
+    }
+
+    if (section !== "dependencies" && section !== "build-dependencies") {
+      continue;
+    }
+
+    const keyMatch = line.match(/^([\w-]+)\s*=/);
+    if (keyMatch && matches(keyMatch[1])) return true;
+  }
+
+  return false;
 }
 
 export async function getRecentRubyPackages(

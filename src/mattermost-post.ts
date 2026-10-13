@@ -22,6 +22,10 @@ function sortPackagesForReport(packages: PackageInfo[]): PackageInfo[] {
   );
 }
 
+function formatBinSignals(pkg: PackageInfo): string {
+  return (pkg.binSignals ?? (pkg.hasBin ? ["cli"] : [])).join(",");
+}
+
 /**
  * Convert package info to a markdown table
  */
@@ -33,8 +37,8 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
   const hasJsLines = packages.some((pkg) => pkg.jsLines !== undefined);
 
   const header = hasJsLines
-    ? "| Ecosystem | Name | Description | Published | Versions | CLI | JS Lines |"
-    : "| Ecosystem | Name | Description | Published | Versions | CLI |";
+    ? "| Ecosystem | Name | Description | Published | Versions | Bin | JS Lines |"
+    : "| Ecosystem | Name | Description | Published | Versions | Bin |";
 
   const separator = hasJsLines
     ? "|:----------|:-----|:------------|:----------|:---------|:---:|:---------|"
@@ -46,14 +50,14 @@ export function toMarkdownTable(packages: PackageInfo[]): string {
     const desc = (pkg.description || "-").substring(0, 80);
     const published = pkg.publishedAt.toISOString().split("T")[0];
     const versions = pkg.numberOfVersions.toString();
-    const hasCli = pkg.hasBin ? "✓" : "";
+    const bin = formatBinSignals(pkg);
 
     if (hasJsLines) {
       const jsLines = pkg.jsLines?.toLocaleString() || "0";
-      return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${hasCli} | ${jsLines} |`;
+      return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${bin} | ${jsLines} |`;
     }
 
-    return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${hasCli} |`;
+    return `| ${ecosystem} | ${name} | ${desc} | ${published} | ${versions} | ${bin} |`;
   });
 
   return [header, separator, ...rows].join("\n");

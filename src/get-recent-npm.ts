@@ -264,6 +264,7 @@ function packageInfoFromDocument(
     npmUrl: `${NPM_PACKAGE_URL_BASE}/${encodeURIComponent(pkgName)}`,
     numberOfVersions,
     hasBin,
+    binSignals: hasBin ? ["cli"] : [],
   };
 }
 

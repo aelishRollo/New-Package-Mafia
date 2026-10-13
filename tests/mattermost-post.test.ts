@@ -3,7 +3,11 @@ import test from "node:test";
 import { toMarkdownTable } from "../src/mattermost-post.js";
 import type { PackageInfo } from "../src/package-types.js";
 
-function pkg(name: string, ecosystem: PackageInfo["ecosystem"] = "npm"): PackageInfo {
+function pkg(
+  name: string,
+  ecosystem: PackageInfo["ecosystem"] = "npm",
+  binSignals: string[] = []
+): PackageInfo {
   return {
     ecosystem,
     name,
@@ -12,7 +16,8 @@ function pkg(name: string, ecosystem: PackageInfo["ecosystem"] = "npm"): Package
     publishedAt: new Date("2026-10-12T00:00:00Z"),
     npmUrl: `https://www.npmjs.com/package/${encodeURIComponent(name)}`,
     numberOfVersions: 2,
-    hasBin: false,
+    hasBin: binSignals.includes("cli"),
+    binSignals,
   };
 }
 
@@ -23,11 +28,21 @@ test("toMarkdownTable orders packages by name ascending", () => {
     pkg("Alpha"),
   ]);
 
-  const rows = table.split("\n").slice(2);
+  const lines = table.split("\n");
+  const rows = lines.slice(2);
 
+  assert.match(lines[0], /\| Bin \|/);
   assert.match(rows[0], /\[@scope\/bravo\]/);
   assert.match(rows[1], /\[Alpha\]/);
   assert.match(rows[2], /\[zeta\]/);
+});
+
+test("toMarkdownTable renders bin signals", () => {
+  const table = toMarkdownTable([
+    pkg("app", "rust", ["cli", "gpui", "tauri"]),
+  ]);
+
+  assert.match(table, /\| rust \| \[app\].*\| cli,gpui,tauri \|/);
 });
 
 test("toMarkdownTable lists npm packages before rust packages", () => {

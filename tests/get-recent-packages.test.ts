@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 import { getRecentPackages } from "../src/get-recent-packages.js";
 
 type Json = Record<string, unknown>;
@@ -9,6 +10,32 @@ function response(body: Json): Response {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+}
+
+function bytesResponse(body: Buffer): Response {
+  return new Response(body, { status: 200 });
+}
+
+function crateArchive(cargoToml: string): Buffer {
+  const body = Buffer.from(cargoToml);
+  const header = Buffer.alloc(512);
+  header.write("pkg-0.1.0/Cargo.toml", 0, "utf8");
+  header.write("0000644\0", 100, "ascii");
+  header.write("0000000\0", 108, "ascii");
+  header.write("0000000\0", 116, "ascii");
+  header.write(body.length.toString(8).padStart(11, "0") + "\0", 124, "ascii");
+  header.write("00000000000\0", 136, "ascii");
+  header.fill(" ", 148, 156);
+  header.write("0", 156, "ascii");
+  header.write("ustar\0", 257, "ascii");
+  header.write("00", 263, "ascii");
+
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148, "ascii");
+
+  const padding = Buffer.alloc(Math.ceil(body.length / 512) * 512 - body.length);
+  return gzipSync(Buffer.concat([header, body, padding, Buffer.alloc(1024)]));
 }
 
 function npmPackument(name: string): Json {
@@ -48,6 +75,10 @@ test("all provider combines npm and rust only", async () => {
     }
 
     if (url.hostname === "crates.io") {
+      if (url.pathname.endsWith("/download")) {
+        return bytesResponse(crateArchive("[package]\nname = \"rust-good\"\n"));
+      }
+
       return response({
         crates: [
           {

@@ -11,6 +11,7 @@ export interface PackageInfo {
   numberOfVersions: number;
   jsLines?: number;
   hasBin?: boolean;
+  binSignals?: string[];
   aiSummary?: string;
 }
 

@@ -117,6 +117,7 @@ test("npm scanner walks _changes forward and filters created packages", async ()
     assert.deepEqual(packages.map((pkg) => pkg.name), ["new-good"]);
     assert.equal(packages[0].numberOfVersions, 2);
     assert.equal(packages[0].hasBin, true);
+    assert.deepEqual(packages[0].binSignals, ["cli"]);
     assert.equal(packageFetches.get("new-good"), 1);
     assert.equal(packageFetches.get("old-updated"), 1);
     assert.equal(packageFetches.get("single-version"), 1);
@@ -198,6 +199,7 @@ test("npm scanner preserves search and requireBin filters", async () => {
     });
 
     assert.deepEqual(packages.map((pkg) => pkg.name), ["matching-cli"]);
+    assert.deepEqual(packages[0].binSignals, ["cli"]);
   } finally {
     globalThis.fetch = oldFetch;
   }

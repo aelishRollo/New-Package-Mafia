@@ -30,9 +30,16 @@ async function parseCsvFile(filePath: string): Promise<PackageInfo[]> {
     const descIdx = headers.indexOf("Description");
     const publishedIdx = headers.indexOf("Published");
     const versionsIdx = headers.indexOf("Versions");
+    const binIdx = headers.indexOf("Bin");
     const cliIdx = headers.indexOf("Has CLI");
     const jsLinesIdx = headers.indexOf("JS Lines");
     const urlIdx = headers.indexOf("URL");
+    const binSignals = binIdx === -1
+      ? []
+      : values[binIdx].split(",").map((value) => value.trim()).filter(Boolean);
+    if (binSignals.length === 0 && values[cliIdx] === "Yes") {
+      binSignals.push("cli");
+    }
 
     if (nameIdx === -1 || versionIdx === -1) {
       throw new Error("CSV must have Name and Version columns");
@@ -46,7 +53,8 @@ async function parseCsvFile(filePath: string): Promise<PackageInfo[]> {
       publishedAt: values[publishedIdx] ? new Date(values[publishedIdx]) : new Date(),
       npmUrl: values[urlIdx] || `https://www.npmjs.com/package/${values[nameIdx]}`,
       numberOfVersions: values[versionsIdx] ? parseInt(values[versionsIdx], 10) : 1,
-      hasBin: values[cliIdx] === "Yes",
+      hasBin: binSignals.length > 0 || values[cliIdx] === "Yes",
+      binSignals,
       jsLines: values[jsLinesIdx] ? parseInt(values[jsLinesIdx], 10) : undefined,
     });
   }
@@ -477,10 +485,11 @@ function generateCsv(packages: PackageInfo[]): string {
   const hasJsLines = packages.some(pkg => pkg.jsLines !== undefined);
 
   const headers = hasJsLines
-    ? ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Has CLI", "JS Lines", "URL"]
-    : ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Has CLI", "URL"];
+    ? ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Bin", "JS Lines", "URL"]
+    : ["Ecosystem", "Name", "Version", "Description", "Published", "Versions", "Bin", "URL"];
 
   const rows = packages.map((pkg) => {
+    const binSignals = pkg.binSignals ?? (pkg.hasBin ? ["cli"] : []);
     const row = [
       escapeCsv(pkg.ecosystem),
       escapeCsv(pkg.name),
@@ -488,7 +497,7 @@ function generateCsv(packages: PackageInfo[]): string {
       escapeCsv(pkg.description),
       pkg.publishedAt.toISOString().split("T")[0],
       pkg.numberOfVersions.toString(),
-      pkg.hasBin ? "Yes" : "No",
+      escapeCsv(binSignals.join(",")),
     ];
 
     if (hasJsLines) {
