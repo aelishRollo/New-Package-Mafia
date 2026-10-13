@@ -19,11 +19,19 @@ function bytesResponse(body: Buffer, headers: Record<string, string> = {}): Resp
   });
 }
 
-function crateArchive(cargoToml: string): Buffer {
-  return gzipSync(tarFile("pkg-0.1.0/Cargo.toml", cargoToml));
+function crateArchive(cargoToml: string, files: Record<string, string> = {}): Buffer {
+  return gzipSync(tarFiles({
+    "pkg-0.1.0/Cargo.toml": cargoToml,
+    ...files,
+  }));
 }
 
-function tarFile(path: string, content: string): Buffer {
+function tarFiles(files: Record<string, string>): Buffer {
+  const entries = Object.entries(files).map(([path, content]) => tarEntry(path, content));
+  return Buffer.concat([...entries, Buffer.alloc(1024)]);
+}
+
+function tarEntry(path: string, content: string): Buffer {
   const body = Buffer.from(content);
   const header = Buffer.alloc(512);
   header.write(path, 0, "utf8");
@@ -42,7 +50,7 @@ function tarFile(path: string, content: string): Buffer {
   header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148, "ascii");
 
   const padding = Buffer.alloc(Math.ceil(body.length / 512) * 512 - body.length);
-  return Buffer.concat([header, body, padding, Buffer.alloc(1024)]);
+  return Buffer.concat([header, body, padding]);
 }
 
 function crate(
@@ -211,7 +219,13 @@ version = "0.1"
 
 [dependencies.tauri]
 version = "2"
-`));
+
+[build-dependencies.tauri-build]
+version = "2"
+`, {
+        "pkg-0.1.0/src/main.rs": "fn main() {}\n",
+        "pkg-0.1.0/tauri.conf.json": "{}\n",
+      }));
     }
 
     return response({
@@ -231,6 +245,105 @@ version = "2"
     });
 
     assert.deepEqual(packages[0].binSignals, ["cli", "gpui", "tauri"]);
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
+test("rust provider does not mark Tauri plugin crates as desktop apps", async () => {
+  const oldFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(input.toString());
+
+    if (url.pathname.endsWith("/download")) {
+      return bytesResponse(crateArchive(`
+[package]
+name = "tauri-plugin-demo"
+
+[dependencies.tauri]
+version = "2"
+`));
+    }
+
+    return response({
+      crates: [
+        crate("tauri-plugin-demo", "2026-10-11T00:00:00Z", 2, {
+          description: "Plugin for Tauri desktop apps",
+        }),
+      ],
+    });
+  }) as typeof fetch;
+
+  try {
+    const packages = await getRecentRustPackages({
+      changesLimit: 10,
+      maxPages: 1,
+      maxResults: 10,
+      daysBack: 7,
+      now: Date.parse("2026-10-12T00:00:00Z"),
+    });
+
+    assert.deepEqual(packages[0].binSignals, []);
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
+test("rust provider filters desktop apps after inspection and keeps scanning", async () => {
+  const oldFetch = globalThis.fetch;
+  const downloads: string[] = [];
+
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(input.toString());
+
+    if (url.pathname.endsWith("/download")) {
+      const name = decodeURIComponent(url.pathname.split("/")[4]);
+      downloads.push(name);
+      if (name === "tauri-app") {
+        return bytesResponse(crateArchive(`
+[package]
+name = "tauri-app"
+
+[dependencies.tauri]
+version = "2"
+
+[build-dependencies.tauri-build]
+version = "2"
+`, {
+          "pkg-0.1.0/src/main.rs": "fn main() {}\n",
+          "pkg-0.1.0/tauri.conf.json": "{}\n",
+        }));
+      }
+
+      return bytesResponse(crateArchive(`
+[package]
+name = "${name}"
+`));
+    }
+
+    return response({
+      crates: [
+        crate("plain-one", "2026-10-11T00:00:00Z", 2),
+        crate("plain-two", "2026-10-11T00:00:00Z", 2),
+        crate("tauri-app", "2026-10-11T00:00:00Z", 2),
+      ],
+    });
+  }) as typeof fetch;
+
+  try {
+    const packages = await getRecentRustPackages({
+      changesLimit: 10,
+      maxPages: 1,
+      maxResults: 1,
+      daysBack: 7,
+      requireDesktopApp: true,
+      now: Date.parse("2026-10-12T00:00:00Z"),
+    });
+
+    assert.deepEqual(packages.map((pkg) => pkg.name), ["tauri-app"]);
+    assert.deepEqual(packages[0].binSignals, ["cli", "tauri"]);
+    assert.deepEqual(downloads, ["plain-one", "plain-two", "tauri-app"]);
   } finally {
     globalThis.fetch = oldFetch;
   }

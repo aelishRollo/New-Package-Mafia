@@ -36,6 +36,11 @@ interface RustCrateInspection {
   hasBin: boolean;
 }
 
+interface RustCrateArchive {
+  cargoToml: string;
+  paths: string[];
+}
+
 interface RubyGemActivity {
   name: string;
   version: string;
@@ -131,6 +136,9 @@ export async function getRecentRustPackages(
         const inspection = await inspectRustCrate(crate.name, version);
         pkg.hasBin = inspection.hasBin;
         pkg.binSignals = inspection.binSignals;
+        if (options.requireDesktopApp && !isDesktopAppInspection(inspection)) {
+          continue;
+        }
         results.push(pkg);
         console.log(`Found rust: ${pkg.name}@${pkg.version} [${results.length}/${maxResults}]`);
       }
@@ -172,12 +180,12 @@ async function inspectRustCrate(name: string, version: string): Promise<RustCrat
       return { binSignals: [], hasBin: false };
     }
 
-    const cargoToml = readCargoTomlFromCrate(bytes);
-    if (!cargoToml) {
+    const archive = readCrateArchive(bytes);
+    if (!archive) {
       return { binSignals: [], hasBin: false };
     }
 
-    return inspectCargoToml(cargoToml);
+    return inspectCargoToml(archive);
   } catch {
     return { binSignals: [], hasBin: false };
   }
@@ -208,9 +216,11 @@ async function readResponseBodyWithLimit(res: Response, maxBytes: number): Promi
   return Buffer.concat(chunks, total);
 }
 
-function readCargoTomlFromCrate(crateBytes: Buffer): string | null {
+function readCrateArchive(crateBytes: Buffer): RustCrateArchive | null {
   const tarBytes = gunzipSync(crateBytes);
   let offset = 0;
+  let cargoToml: string | null = null;
+  const paths: string[] = [];
 
   while (offset + 512 <= tarBytes.length) {
     const header = tarBytes.subarray(offset, offset + 512);
@@ -222,16 +232,17 @@ function readCargoTomlFromCrate(crateBytes: Buffer): string | null {
     const size = parseInt(readTarString(header, 124, 12).trim() || "0", 8);
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
+    paths.push(fullPath);
 
-    if (fullPath.endsWith("/Cargo.toml") && !fullPath.endsWith("/Cargo.toml.orig")) {
+    if (cargoToml === null && fullPath.endsWith("/Cargo.toml") && !fullPath.endsWith("/Cargo.toml.orig")) {
       if (size > CRATES_CARGO_TOML_MAX_BYTES) return null;
-      return tarBytes.subarray(dataStart, dataEnd).toString("utf8");
+      cargoToml = tarBytes.subarray(dataStart, dataEnd).toString("utf8");
     }
 
     offset = dataStart + Math.ceil(size / 512) * 512;
   }
 
-  return null;
+  return cargoToml === null ? null : { cargoToml, paths };
 }
 
 function readTarString(buffer: Buffer, offset: number, length: number): string {
@@ -240,18 +251,21 @@ function readTarString(buffer: Buffer, offset: number, length: number): string {
   return slice.subarray(0, zero === -1 ? slice.length : zero).toString("utf8");
 }
 
-function inspectCargoToml(cargoToml: string): RustCrateInspection {
+function inspectCargoToml(archive: RustCrateArchive): RustCrateInspection {
+  const cargoToml = archive.cargoToml;
+  const hasBinaryTarget = hasRustBinaryTarget(cargoToml, archive.paths);
+  const hasTauriConfig = archive.paths.some(isTauriConfigPath);
   const binSignals: string[] = [];
-  if (/^\s*\[\[bin\]\]/m.test(cargoToml)) {
+  if (hasBinaryTarget) {
     binSignals.push("cli");
   }
-  if (hasCargoDependency(cargoToml, "gpui")) {
+  if (hasBinaryTarget && hasCargoDependency(cargoToml, "gpui")) {
     binSignals.push("gpui");
   }
   if (
-    hasCargoDependency(cargoToml, "tauri") ||
-    hasCargoDependency(cargoToml, "tauri-build") ||
-    hasCargoDependencyPrefix(cargoToml, "tauri-plugin-")
+    hasTauriConfig &&
+    hasCargoDependency(cargoToml, "tauri") &&
+    hasCargoDependency(cargoToml, "tauri-build")
   ) {
     binSignals.push("tauri");
   }
@@ -259,12 +273,28 @@ function inspectCargoToml(cargoToml: string): RustCrateInspection {
   return { binSignals, hasBin: binSignals.includes("cli") };
 }
 
-function hasCargoDependency(cargoToml: string, name: string): boolean {
-  return hasCargoDependencyMatching(cargoToml, (dependency) => dependency === name);
+function isDesktopAppInspection(inspection: RustCrateInspection): boolean {
+  return inspection.binSignals.includes("tauri") || inspection.binSignals.includes("gpui");
 }
 
-function hasCargoDependencyPrefix(cargoToml: string, prefix: string): boolean {
-  return hasCargoDependencyMatching(cargoToml, (dependency) => dependency.startsWith(prefix));
+function hasRustBinaryTarget(cargoToml: string, paths: string[]): boolean {
+  if (/^\s*\[\[bin\]\]/m.test(cargoToml)) {
+    return true;
+  }
+
+  return paths.some((path) => path.endsWith("/src/main.rs"));
+}
+
+function isTauriConfigPath(path: string): boolean {
+  return (
+    path.endsWith("/tauri.conf.json") ||
+    path.endsWith("/tauri.conf.json5") ||
+    path.endsWith("/Tauri.toml")
+  );
+}
+
+function hasCargoDependency(cargoToml: string, name: string): boolean {
+  return hasCargoDependencyMatching(cargoToml, (dependency) => dependency === name);
 }
 
 function hasCargoDependencyMatching(

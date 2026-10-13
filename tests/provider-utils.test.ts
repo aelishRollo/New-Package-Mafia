@@ -29,10 +29,12 @@ test("parseCliArgs reads report control flags", () => {
     "--csv",
     "out/packages.csv",
     "--ai-summaries",
+    "--require-desktop-app",
   ]);
 
   assert.equal(args.csvFile, "out/packages.csv");
   assert.equal(args.aiSummaries, true);
+  assert.equal(args.requireDesktopApp, true);
 });
 
 test("isWithinDays rejects old and future dates", () => {

@@ -26,6 +26,7 @@ export interface GetRecentPackagesOptions {
   minJsLines?: number;
   maxPages?: number;
   requireBin?: boolean;
+  requireDesktopApp?: boolean;
   /** Test/debug hook: use this sequence as the npm forward scan start. */
   npmStartSeq?: number;
   /** Test/debug hook: freeze the npm scan end sequence without fetching head. */

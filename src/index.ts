@@ -53,7 +53,7 @@ async function parseCsvFile(filePath: string): Promise<PackageInfo[]> {
       publishedAt: values[publishedIdx] ? new Date(values[publishedIdx]) : new Date(),
       npmUrl: values[urlIdx] || `https://www.npmjs.com/package/${values[nameIdx]}`,
       numberOfVersions: values[versionsIdx] ? parseInt(values[versionsIdx], 10) : 1,
-      hasBin: binSignals.length > 0 || values[cliIdx] === "Yes",
+      hasBin: binSignals.includes("cli") || values[cliIdx] === "Yes",
       binSignals,
       jsLines: values[jsLinesIdx] ? parseInt(values[jsLinesIdx], 10) : undefined,
     });
@@ -266,6 +266,7 @@ async function main() {
   let changesLimit = args.changesLimit ?? 200;
   let maxPages = args.maxPages ?? 1000;
   let requireBin = args.requireBin ?? false;
+  let requireDesktopApp = args.requireDesktopApp ?? false;
 
   if (args.provider !== undefined) {
     if (!isPackageProvider(args.provider)) {
@@ -399,6 +400,11 @@ async function main() {
     requireBin = false;
   }
 
+  if (provider !== "rust" && provider !== "all" && requireDesktopApp) {
+    clack.log.warn("--require-desktop-app is Rust-only and will be ignored for this provider");
+    requireDesktopApp = false;
+  }
+
   spinner.start(`Fetching recent ${provider} packages...`);
 
   try {
@@ -412,6 +418,7 @@ async function main() {
       minJsLines,
       maxPages,
       requireBin,
+      requireDesktopApp,
     });
 
     spinner.stop("Search complete!");

@@ -13,6 +13,7 @@ export interface CliArgs {
   changesLimit?: number;
   maxPages?: number;
   requireBin?: boolean;
+  requireDesktopApp?: boolean;
   csvFile?: string;
   aiSummaries?: boolean;
 }
@@ -68,6 +69,10 @@ export function parseCliArgs(args: string[]): CliArgs {
         result.requireBin = true;
         break;
 
+      case "--require-desktop-app":
+        result.requireDesktopApp = true;
+        break;
+
       case "--csv":
         result.csvFile = args[++i];
         break;
@@ -109,6 +114,7 @@ Options:
                           The tool will automatically page through the changes feed
                           until it finds enough matching packages or hits this limit
   --require-bin           Only show packages with CLI bin entries (executables)
+  --require-desktop-app   Only show Rust crates that look like actual Tauri/GPUI desktop apps
   --csv <path>            Process an existing CSV instead of searching for new packages
   --ai-summaries          Prompt to generate AI summaries (default: off)
 

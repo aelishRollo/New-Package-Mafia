@@ -40,6 +40,10 @@ async function getRecentReportPackages(
   const packages: PackageInfo[] = [];
 
   for (const provider of REPORT_READY_PROVIDERS) {
+    if (options.requireDesktopApp && provider !== "rust") {
+      continue;
+    }
+
     const providerOptions: GetRecentPackagesOptions = {
       ...options,
       provider,
